@@ -112,3 +112,4 @@ class SearchSolution(Base):
 
     def cos_sim(self, query: np.array) -> np.array:
         return np.dot(self.reg_matrix, query)
+
