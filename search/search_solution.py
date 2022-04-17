@@ -45,13 +45,13 @@ class Leaf:
 class Node:
     def __init__(self, reg_matrix, ids, depth, left_number):
         self.depth = depth
-#        print("reg_matrix len: ", len(reg_matrix), " depth ", depth, " left number ", left_number)
+        print("reg_matrix len: ", len(reg_matrix), " depth ", depth, " left number ", left_number)
         best_pc = None
         best_balance = 2.5
 
 #        for i  in range(2):
 #        for i  in range(3):
-        for i  in range(5):
+        for i  in range(1):
             pc = self.calc_pc(reg_matrix)
             left, left_ids, right, right_ids, balance = self.try_break(reg_matrix, ids, pc)
             if balance < best_balance:
@@ -77,13 +77,13 @@ class Node:
         for vec, idd in zip(reg_matrix, ids):
             sim = cos_sim(vec, pc)
 #            if sim > -0.02
-            if sim > -0.004:
+            if sim > -0.003:
                 left.append(vec)
                 left_ids.append(idd)
             if sim > 0.05:
                 balanced_left = balanced_left + 1
 #            if sim < 0.02:
-            if sim < 0.004:
+            if sim < 0.003:
                 right.append(vec)
                 right_ids.append(idd)
             if sim < -0.05:
@@ -93,9 +93,9 @@ class Node:
         
 
     def calc_pc(self, reg_matrix):
-        vec = random.choice(reg_matrix)
+#        vec = random.choice(reg_matrix)
         x = np.random.randn(512)
-        x -= x.dot(vec) * vec
+#        x -= x.dot(vec) * vec
         x /= np.linalg.norm(x)
         return x
 
@@ -109,10 +109,10 @@ class Node:
         sim = cos_sim(query, self.pc)
         result = []
 #        if sim > -0.05:
-        if sim > -0.0485:
+        if sim > -0.03:
             result = result + self.left.search(query)
 #        if sim < 0.05:
-        if sim < 0.0485:
+        if sim < 0.03:
             result = result + self.right.search(query)
         return result
 
@@ -144,7 +144,7 @@ def create_node(reg_matrix, ids, depth, left_number):
 #    if reg_matrix.shape[0] < 1:
     if len(reg_matrix) < 1:
         return Empty()
-    if depth > 13:
+    if depth > 8:
         return OurList(reg_matrix, ids)
     return Node(reg_matrix, ids, depth, left_number)
 
@@ -199,12 +199,15 @@ class SearchSolution(Base):
         gc.collect()
 
 #        print("n vec", len(self.reg_matrix))
-        self.root = create_node(self.reg_matrix, self.ids, 0, 0)
+        self.roots = []
+        for i in range(3):
+            self.roots.append(create_node(self.reg_matrix, self.ids, 0, 0))
         del self.reg_matrix
         self.reg_matrix = None
         gc.collect()
 
-        self.root.optimize()
+        for root in self.roots:
+            root.optimize()
 
     
     # @profile
@@ -253,7 +256,10 @@ class SearchSolution(Base):
         Return:
             List[Tuple] - indicies of search, similarity
         '''
-        return self.root.search(query)
+        result = []
+        for root in self.roots:
+            result = result + root.search(query)
+        return result
     
 
     def insert_base(self, feature: np.array) -> None:
