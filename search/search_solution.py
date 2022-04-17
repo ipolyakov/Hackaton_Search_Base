@@ -6,6 +6,147 @@ from typing import List, Tuple
 from config import Config as cfg 
 from .search import Base
 
+import random
+
+import cProfile
+
+import gc
+
+import memory_profiler
+
+def profile(func):
+    """Decorator for run function profile"""
+    def wrapper(*args, **kwargs):
+        profile_filename = func.__name__ + '.prof'
+        profiler = cProfile.Profile()
+        result = profiler.runcall(func, *args, **kwargs)
+        profiler.dump_stats(profile_filename)
+        return result
+    return wrapper
+
+def cos_sim(vec, query):
+    result = np.dot(vec, query)
+    return result
+
+class Leaf:
+    def __init__(self, vec, num):
+        self.vec = vec
+        self.num = num
+
+    def search(self, query):
+        sim = cos_sim(vec, query)
+        if sim > 0.6:
+            return [num, sim]
+        return []
+
+    def optimize(self):
+        pass
+
+class Node:
+    def __init__(self, reg_matrix, ids, depth, left_number):
+        self.depth = depth
+#        print("reg_matrix len: ", len(reg_matrix), " depth ", depth, " left number ", left_number)
+        best_pc = None
+        best_balance = 1.1
+
+#        for i  in range(2):
+#        for i  in range(3):
+        for i  in range(4):
+            pc = self.calc_pc(reg_matrix)
+            left, left_ids, right, right_ids, balance = self.try_break(reg_matrix, ids, pc)
+            if balance < best_balance:
+                best_pc = pc
+                best_balance = balance
+                best_left = left
+                best_right = right
+                best_left_ids = left_ids
+                best_right_ids = right_ids
+
+#        print("Best balance: ", best_balance, " ", len(best_left), " ", len(best_right), " " , len(reg_matrix))
+        self.pc = best_pc
+        self.left = create_node(best_left, best_left_ids, depth+1, left_number)
+        self.right = create_node(best_right, best_right_ids, depth+1, left_number + len(best_left))
+
+    def try_break(self, reg_matrix, ids, pc):
+        left = []
+        left_ids = []
+        right =[]
+        right_ids = []
+        balanced_left = 0
+        balanced_right = 0
+        for vec, idd in zip(reg_matrix, ids):
+            sim = cos_sim(vec, pc)
+#            if sim > -0.02
+            if sim > -0.004:
+                left.append(vec)
+                left_ids.append(idd)
+            if sim > 0.05:
+                balanced_left = balanced_left + 1
+#            if sim < 0.02:
+            if sim < 0.004:
+                right.append(vec)
+                right_ids.append(idd)
+            if sim < -0.05:
+                balanced_right = balanced_right + 1
+        balance = (len(reg_matrix) - (balanced_left + balanced_right)) / len(reg_matrix)
+        return left, left_ids, right, right_ids, balance
+        
+
+    def calc_pc(self, reg_matrix):
+        vec = random.choice(reg_matrix)
+        x = np.random.randn(512)
+        x -= x.dot(vec) * vec
+        x /= np.linalg.norm(x)
+        return x
+
+    def optimize(self):
+        self.left.optimize()
+        self.right.optimize()
+        if self.depth < 5:
+            gc.collect()
+
+    def search(self, query):
+        sim = cos_sim(query, self.pc)
+        result = []
+#        if sim > -0.05:
+        if sim > -0.04:
+            result = result + self.left.search(query)
+#        if sim < 0.05:
+        if sim < 0.04:
+            result = result + self.right.search(query)
+        return result
+
+class Empty:
+    def search(self, query):
+        return []
+
+    def optimize(self):
+        pass
+
+class OurList:
+    def __init__(self, reg_matrix, ids):
+        self.reg_matrix = reg_matrix
+        self.ids = ids
+
+    def optimize(self):
+#        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)
+        self.reg_matrix = np.array(self.reg_matrix)
+#        self.reg_matrix = np.ascontiguousarray(self.reg_matrix)
+
+    def search(self, query):
+        similarity = np.dot(self.reg_matrix, query)
+        return [(self.ids[i], sim) for i, sim in enumerate(similarity)]
+
+def create_node(reg_matrix, ids, depth, left_number):
+#    if reg_matrix.shape[0] == 1:
+    if len(reg_matrix) == 1:
+        return Leaf(reg_matrix[0], ids[0])
+#    if reg_matrix.shape[0] < 1:
+    if len(reg_matrix) < 1:
+        return Empty()
+    if depth > 14:
+        return OurList(reg_matrix, ids)
+    return Node(reg_matrix, ids, depth, left_number)
 
 class SearchSolution(Base):
     ''' SearchBase class implements 
@@ -27,7 +168,7 @@ class SearchSolution(Base):
         self.data_file = data_file
         self.data_url = data_url
 
-    # @profile
+#    @memory_profiler.profile
     def set_base_from_pickle(self):
         '''
         Downloads the data, if it does not exist.
@@ -50,8 +191,21 @@ class SearchSolution(Base):
             self.reg_matrix[i] = data['reg'][key][0][None]
             self.ids[i] = key
 
-        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)        
+        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)
+#        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)[:200000] # NB!!!
         self.pass_dict = data['pass']
+
+        del data
+        gc.collect()
+
+#        print("n vec", len(self.reg_matrix))
+        self.root = create_node(self.reg_matrix, self.ids, 0, 0)
+        del self.reg_matrix
+        self.reg_matrix = None
+        gc.collect()
+
+        self.root.optimize()
+
     
     # @profile
     def cal_base_speed(self, base_speed_path='./base_speed.pickle') -> float:
@@ -87,7 +241,7 @@ class SearchSolution(Base):
         with open(base_speed_path, 'wb') as f:
             pickle.dump(base_speed, f)
 
-    # @profile
+#    @profile
     def search(self, query: np.array) -> List[Tuple]:
         '''
         Baseline search algorithm. 
@@ -99,8 +253,7 @@ class SearchSolution(Base):
         Return:
             List[Tuple] - indicies of search, similarity
         '''
-        similarity = self.cos_sim(query) 
-        return [(self.ids[i], sim) for i, sim in enumerate(similarity)] 
+        return self.root.search(query)
     
 
     def insert_base(self, feature: np.array) -> None:
@@ -112,4 +265,3 @@ class SearchSolution(Base):
 
     def cos_sim(self, query: np.array) -> np.array:
         return np.dot(self.reg_matrix, query)
-
