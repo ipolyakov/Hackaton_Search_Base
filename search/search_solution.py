@@ -8,6 +8,8 @@ from .search import Base
 
 import random
 
+import math
+
 #import cProfile
 
 import gc
@@ -42,9 +44,16 @@ class Leaf:
     def optimize(self):
         pass
 
+    def findid(self, idd, q):
+        if self.num == idd:
+            print("Leaf id", idd)
+            return True
+        return False
+
 class Node:
     def __init__(self, reg_matrix, ids, depth, left_number):
         self.depth = depth
+        self.ids = ids
         print("reg_matrix len: ", len(reg_matrix), " depth ", depth, " left number ", left_number)
         best_pc = None
         best_balance = 2.5
@@ -53,7 +62,9 @@ class Node:
 #        for i  in range(3):
         for i  in range(1):
             pc = self.calc_pc(reg_matrix)
-            left, left_ids, right, right_ids, balance = self.try_break(reg_matrix, ids, pc)
+            left, left_ids, right, right_ids, balance1 = self.try_break(reg_matrix, ids, pc)
+            balance2 = abs(len(left) -len(right)) / len(reg_matrix)
+            balance = math.sqrt(balance1 * balance1 + balance2*balance2)
             if balance < best_balance:
                 best_pc = pc
                 best_balance = balance
@@ -66,6 +77,20 @@ class Node:
         self.pc = best_pc
         self.left = create_node(best_left, best_left_ids, depth+1, left_number)
         self.right = create_node(best_right, best_right_ids, depth+1, left_number + len(best_left))
+
+    def findid(self, idd, q):
+        if idd in self.ids:
+            contains = self.search(q)
+            contains = len([True for tup in contains if tup[0] == idd])
+            print("Node should contain ", idd, " depth ", self.depth, " contains ", contains)
+            if (contains == 0):
+                print("Cos sim ", cos_sim(q, self.pc))
+            print("Going left")
+            foundleft = self.left.findid(idd, q)
+            print("Going right")
+            foundright = self.right.findid(idd, q)
+            return foundleft or foundright
+        return False
 
     def try_break(self, reg_matrix, ids, pc):
         left = []
@@ -102,17 +127,19 @@ class Node:
     def optimize(self):
         self.left.optimize()
         self.right.optimize()
-        if self.depth < 5:
+        if self.depth < 2:
             gc.collect()
 
     def search(self, query):
         sim = cos_sim(query, self.pc)
         result = []
 #        if sim > -0.05:
-        if sim > -0.03:
+#        if sim > -0.025:
+        if sim >= -0.022:
             result = result + self.left.search(query)
 #        if sim < 0.05:
-        if sim < 0.03:
+#       if sim < 0.025:
+        if sim <= 0.022:
             result = result + self.right.search(query)
         return result
 
@@ -123,6 +150,9 @@ class Empty:
     def optimize(self):
         pass
 
+    def findid(self, idd, q):
+        return False
+
 class OurList:
     def __init__(self, reg_matrix, ids):
         self.reg_matrix = reg_matrix
@@ -130,12 +160,18 @@ class OurList:
 
     def optimize(self):
 #        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)
-        self.reg_matrix = np.array(self.reg_matrix)
+#        self.reg_matrix = np.array(self.reg_matrix)
 #        self.reg_matrix = np.ascontiguousarray(self.reg_matrix)
+        pass
 
     def search(self, query):
         similarity = np.dot(self.reg_matrix, query)
         return [(self.ids[i], sim) for i, sim in enumerate(similarity)]
+
+    def findid(self, idd, q):
+        result = idd in self.ids
+        print("OutList ", idd, result)
+        return result
 
 def create_node(reg_matrix, ids, depth, left_number):
 #    if reg_matrix.shape[0] == 1:
@@ -144,7 +180,7 @@ def create_node(reg_matrix, ids, depth, left_number):
 #    if reg_matrix.shape[0] < 1:
     if len(reg_matrix) < 1:
         return Empty()
-    if depth > 8:
+    if depth > 12:
         return OurList(reg_matrix, ids)
     return Node(reg_matrix, ids, depth, left_number)
 
@@ -194,20 +230,22 @@ class SearchSolution(Base):
         self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)
 #        self.reg_matrix = np.concatenate(self.reg_matrix, axis=0)[:200000] # NB!!!
         self.pass_dict = data['pass']
+#        print(self.pass_dict)
 
         del data
         gc.collect()
 
 #        print("n vec", len(self.reg_matrix))
         self.roots = []
-        for i in range(3):
+#        for i in range(3):
+        for i in range(9):
             self.roots.append(create_node(self.reg_matrix, self.ids, 0, 0))
         del self.reg_matrix
         self.reg_matrix = None
         gc.collect()
 
-        for root in self.roots:
-            root.optimize()
+#        for root in self.roots:
+#            root.optimize()
 
     
     # @profile
@@ -260,6 +298,10 @@ class SearchSolution(Base):
         for root in self.roots:
             result = result + root.search(query)
         return result
+
+    def findid(self, idd, q):
+        for root in self.roots:
+            root.findid(idd, q)
     
 
     def insert_base(self, feature: np.array) -> None:
