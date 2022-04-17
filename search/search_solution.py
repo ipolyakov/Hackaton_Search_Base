@@ -8,21 +8,21 @@ from .search import Base
 
 import random
 
-import cProfile
+#import cProfile
 
 import gc
 
-import memory_profiler
+#import memory_profiler
 
-def profile(func):
-    """Decorator for run function profile"""
-    def wrapper(*args, **kwargs):
-        profile_filename = func.__name__ + '.prof'
-        profiler = cProfile.Profile()
-        result = profiler.runcall(func, *args, **kwargs)
-        profiler.dump_stats(profile_filename)
-        return result
-    return wrapper
+#def profile(func):
+#    """Decorator for run function profile"""
+#    def wrapper(*args, **kwargs):
+#        profile_filename = func.__name__ + '.prof'
+#        profiler = cProfile.Profile()
+#        result = profiler.runcall(func, *args, **kwargs)
+#        profiler.dump_stats(profile_filename)
+#        return result
+#    return wrapper
 
 def cos_sim(vec, query):
     result = np.dot(vec, query)
@@ -34,9 +34,9 @@ class Leaf:
         self.num = num
 
     def search(self, query):
-        sim = cos_sim(vec, query)
+        sim = cos_sim(self.vec, query)
         if sim > 0.6:
-            return [num, sim]
+            return [self.num, sim]
         return []
 
     def optimize(self):
@@ -47,11 +47,11 @@ class Node:
         self.depth = depth
 #        print("reg_matrix len: ", len(reg_matrix), " depth ", depth, " left number ", left_number)
         best_pc = None
-        best_balance = 1.1
+        best_balance = 2.5
 
 #        for i  in range(2):
 #        for i  in range(3):
-        for i  in range(4):
+        for i  in range(5):
             pc = self.calc_pc(reg_matrix)
             left, left_ids, right, right_ids, balance = self.try_break(reg_matrix, ids, pc)
             if balance < best_balance:
@@ -109,10 +109,10 @@ class Node:
         sim = cos_sim(query, self.pc)
         result = []
 #        if sim > -0.05:
-        if sim > -0.04:
+        if sim > -0.0485:
             result = result + self.left.search(query)
 #        if sim < 0.05:
-        if sim < 0.04:
+        if sim < 0.0485:
             result = result + self.right.search(query)
         return result
 
@@ -144,7 +144,7 @@ def create_node(reg_matrix, ids, depth, left_number):
 #    if reg_matrix.shape[0] < 1:
     if len(reg_matrix) < 1:
         return Empty()
-    if depth > 14:
+    if depth > 13:
         return OurList(reg_matrix, ids)
     return Node(reg_matrix, ids, depth, left_number)
 
